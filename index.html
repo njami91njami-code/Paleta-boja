@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Palette Extractor - Pro</title>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --surface-color: #1E1E1E;
+            --primary-color: #4CAF50;
+            --text-color: #FFFFFF;
+            --gray-text: #AAAAAA;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        #image-container {
+            width: 100%;
+            height: 40vh;
+            background-color: #000;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            touch-action: none; 
+        }
+
+        #zoom-wrapper {
+            position: relative;
+            display: inline-block;
+            transition: transform 0.1s ease-out;
+            transform-origin: center center;
+        }
+
+        #image-canvas {
+            max-width: 100vw;
+            max-height: 40vh;
+            width: auto;
+            height: auto;
+            display: block;
+            cursor: crosshair;
+        }
+
+        #markers-container {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; 
+        }
+
+        #results {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            padding-bottom: 80px; 
+        }
+
+        .color-card {
+            background-color: var(--surface-color);
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 16px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding-bottom: 12px;
+        }
+
+        .color-drop {
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            margin-right: 16px;
+            border: 2px solid rgba(255,255,255,0.2);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .color-drop-small {
+            width: 20px; height: 20px; border-radius: 50%; margin-right: 8px; border: 1px solid rgba(255,255,255,0.2);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .color-drop::after, .color-drop-small::after {
+            content: ''; 
+            position: absolute; 
+            top: 15%; left: 20%; width: 30%; height: 30%;
+            background: radial-gradient(circle, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0.1) 60%, rgba(255,255,255,0) 100%); 
+            border-radius: 50%;
+        }
+
+        .color-title { font-weight: bold; font-size: 16px; margin: 0 0 4px 0; }
+        .color-subtitle { font-size: 12px; color: var(--gray-text); margin: 0; }
+        .advice-row { display: flex; align-items: center; margin-bottom: 8px; font-size: 14px; }
+
+        .bottom-nav {
+            position: fixed; bottom: 0; width: 100%; background-color: var(--surface-color);
+            display: flex; justify-content: space-evenly; padding: 12px 0; box-shadow: 0 -2px 10px rgba(0,0,0,0.5);
+            z-index: 10;
+        }
+
+        .nav-btn {
+            background: none; border: none; color: var(--primary-color); font-weight: bold;
+            font-size: 14px; cursor: pointer; display: flex; flex-direction: column; align-items: center;
+        }
+
+        input[type="file"] { display: none; }
+
+        .modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: center;
+        }
+        .modal-content {
+            background-color: var(--surface-color); padding: 20px; border-radius: 16px; width: 90%; max-width: 350px;
+        }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .modal-header h2 { margin: 0; font-size: 18px; color: var(--primary-color); }
+        .close-btn { background: none; border: none; color: white; font-size: 20px; cursor: pointer; }
+        .mixer-stage { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .mixer-column { display: flex; flex-direction: column; align-items: center; }
+        select { width: 100%; padding: 10px; margin-bottom: 15px; border-radius: 8px; background-color: var(--bg-color); color: white; border: 1px solid var(--primary-color); }
+        input[type="range"] { width: 100%; margin-bottom: 20px; }
+        .mixer-result { background-color: var(--bg-color); padding: 15px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; }
+
+        .marker {
+            position: absolute;
+            width: 20px; height: 20px;
+            border: 2px solid white; border-radius: 50%;
+            box-shadow: 0 0 4px rgba(0,0,0,0.8);
+            z-index: 2; display: flex; justify-content: center; align-items: center;
+            font-size: 10px; font-weight: bold; color: white;
+            text-shadow: 1px 1px 2px black, -1px -1px 2px black, 1px -1px 2px black, -1px 1px 2px black;
+        }
+
+        .zoom-btn {
+            background-color: rgba(30, 30, 30, 0.8); color: white; border: 1px solid var(--primary-color);
+            border-radius: 8px; width: 35px; height: 35px; font-size: 18px; cursor: pointer;
+            display: flex; justify-content: center; align-items: center;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="image-container">
+        <span id="placeholder" style="color: gray; position: absolute; z-index: 5;">Tapkanjem ovde nakon učitavanja slike biraš boju</span>
+        <div id="zoom-wrapper">
+            <canvas id="image-canvas"></canvas>
+            <div id="markers-container"></div>
+        </div>
+        <div style="position: absolute; right: 10px; top: 10px; display: flex; flex-direction: column; gap: 8px; z-index: 10;">
+            <button class="zoom-btn" onclick="applyZoom(1.3)">➕</button>
+            <button class="zoom-btn" onclick="applyZoom(1/1.3)">➖</button>
+            <button class="zoom-btn" onclick="resetZoom()">🔄</button>
+        </div>
+    </div>
+
+    <div id="results"></div>
+
+    <div class="bottom-nav">
+        <label for="imageLoader" class="nav-btn">
+            <span style="font-size: 20px; margin-bottom: 4px;">📸</span> Slika
+        </label>
+        <input type="file" id="imageLoader" accept="image/*">
+        
+        <button class="nav-btn" onclick="openMixer()">
+            <span style="font-size: 20px; margin-bottom: 4px;">🎨</span> Mixer
+        </button>
+        
+        <button class="nav-btn" onclick="clearResults()">
+            <span style="font-size: 20px; margin-bottom: 4px;">🗑️</span> Očisti
+        </button>
+    </div>
+
+    <div id="mixerModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Vlažna Paleta (Mixer)</h2>
+                <button class="close-btn" onclick="closeMixer()">✖</button>
+            </div>
+            <div class="mixer-stage">
+                <div class="mixer-column">
+                    <div id="mixDrop1" class="color-drop" style="background-color: #000;"></div>
+                    <span id="drops1Text" style="margin-top: 5px; font-size: 14px;">5 kapi</span>
+                </div>
+                <span style="font-size: 24px; color: gray;">➕</span>
+                <div class="mixer-column">
+                    <div id="mixDrop2" class="color-drop" style="background-color: #000;"></div>
+                    <span id="drops2Text" style="margin-top: 5px; font-size: 14px;">5 kapi</span>
+                </div>
+            </div>
+            <div class="mixer-result">
+                <span style="font-size: 12px; color: gray; margin-bottom: 8px;">Najbliža poznata bočica:</span>
+                <div id="mixResultDrop" class="color-drop" style="width: 60px; height: 60px;"></div>
+                <span id="mixResultText" style="margin-top: 10px; font-weight: bold; color: var(--primary-color);">Rezultat</span>
+            </div>
+            <p style="font-size: 12px; margin-top: 20px; margin-bottom: 5px;">Podesi odnos (Kapi):</p>
+            <input type="range" id="mixSlider" min="0" max="1" step="0.1" value="0.5" oninput="updateMixer()">
+            <select id="color1Select" onchange="updateMixer()"></select>
+            <select id="color2Select" onchange="updateMixer()"></select>
+        </div>
+    </div>
+
+    <script>
+        const paintDatabase = [
+            { name: "VGC Dead White (72.001)", r: 255, g: 255, b: 255, brand: "VGC" },
+            { name: "VGC Black (72.051)", r: 0, g: 0, b: 0, brand: "VGC" },
+            { name: "VGC Moon Yellow (72.005)", r: 253, g: 233, b: 16, brand: "VGC" },
+            { name: "VGC Sun Yellow (72.006)", r: 255, g: 204, b: 0, brand: "VGC" },
+            { name: "VGC Orange Fire (72.008)", r: 255, g: 140, b: 0, brand: "VGC" },
+            { name: "VGC Bloody Red (72.010)", r: 204, g: 0, b: 0, brand: "VGC" },
+            { name: "VGC Gory Red (72.011)", r: 139, g: 0, b: 0, brand: "VGC" },
+            { name: "VGC Warlord Purple (72.014)", r: 128, g: 0, b: 128, brand: "VGC" },
+            { name: "VGC Hexed Lichen (72.015)", r: 75, g: 0, b: 130, brand: "VGC" },
+            { name: "VGC Ultramarine Blue (72.022)", r: 0, g: 0, b: 139, brand: "VGC" },
+            { name: "VGC Ice Blue (72.095)", r: 173, g: 216, b: 230, brand: "VGC" },
+            { name: "VGC Dark Green (72.028)", r: 0, g: 100, b: 0, brand: "VGC" },
+            { name: "VGC Sick Green (72.029)", r: 0, g: 128, b: 0, brand: "VGC" },
+            { name: "VGC Goblin Green (72.030)", r: 50, g: 205, b: 50, brand: "VGC" },
+            { name: "VGC Scorpy Green (72.032)", r: 0, g: 255, b: 0, brand: "VGC" },
+            { name: "VGC Pale Flesh (72.003)", r: 255, g: 218, b: 185, brand: "VGC" },
+            { name: "VGC Bone White (72.034)", r: 245, g: 230, b: 204, brand: "VGC" },
+            { name: "VGC Beasty Brown (72.043)", r: 139, g: 69, b: 19, brand: "VGC" },
+            { name: "VGC Sombre Grey (72.048)", r: 47, g: 79, b: 79, brand: "VGC" },
+            { name: "VMC Black (70.950)", r: 0, g: 0, b: 0, brand: "VMC" },
+            { name: "VMC White (70.951)", r: 255, g: 255, b: 255, brand: "VMC" },
+            { name: "VMC Flat Yellow (70.953)", r: 255, g: 215, b: 0, brand: "VMC" },
+            { name: "VMC Vermillion (70.909)", r: 255, g: 36, b: 0, brand: "VMC" },
+            { name: "VMC Flat Red (70.957)", r: 204, g: 0, b: 0, brand: "VMC" },
+            { name: "VMC Olive Green (70.967)", r: 85, g: 107, b: 47, brand: "VMC" },
+            { name: "VMC Flat Earth (70.983)", r: 160, g: 82, b: 45, brand: "VMC" },
+            { name: "VMC Basic Skintone (70.815)", r: 255, g: 218, b: 185, brand: "VMC" },
+            { name: "VMC Light Grey (70.990)", r: 211, g: 211, b: 211, brand: "VMC" },
+            { name: "Citadel Mephiston Red", r: 154, g: 17, b: 21, brand: "Citadel" },
+            { name: "Citadel Macragge Blue", r: 13, g: 64, b: 127, brand: "Citadel" },
+            { name: "Citadel Moot Green", r: 61, g: 148, b: 50, brand: "Citadel" },
+            { name: "Citadel Abaddon Black", r: 35, g: 31, b: 32, brand: "Citadel" },
+            { name: "Citadel Corax White", r: 255, g: 255, b: 255, brand: "Citadel" },
+            { name: "Citadel Averland Sunset", r: 251, g: 184, b: 28, brand: "Citadel" }
+        ];
+
+        const imageLoader = document.getElementById('imageLoader');
+        const canvas = document.getElementById('image-canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const resultsDiv = document.getElementById('results');
+        const placeholder = document.getElementById('placeholder');
+        const wrapper = document.getElementById('zoom-wrapper');
+        const markersContainer = document.getElementById('markers-container');
+        const container = document.getElementById('image-container');
+        
+        let currentImage = new Image();
+        let pointCount = 0; 
+        
+        let scale = 1;
+        let panX = 0;
+        let panY = 0;
+        let isDragging = false;
+        let startX, startY;
+        let startPanX, startPanY;
+
+        let activePointers = [];
+        let initialPinchDist = null;
+        let initialScale = 1;
+        let wasPinching = false; // Novi fleg za detekciju zumiranja
+
+        imageLoader.addEventListener('change', function(e) {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                currentImage.onload = function() {
+                    placeholder.style.display = 'none';
+                    canvas.width = currentImage.width;
+                    canvas.height = currentImage.height;
+                    ctx.drawImage(currentImage, 0, 0);
+                    clearResults();
+                    resetZoom();
+                }
+                currentImage.src = event.target.result;
+            }
+            if(e.target.files[0]) reader.readAsDataURL(e.target.files[0]);
+        });
+
+        function applyZoom(factor) {
+            scale *= factor;
+            scale = Math.max(0.5, Math.min(scale, 8)); 
+            updateTransform();
+        }
+
+        function resetZoom() {
+            scale = 1; panX = 0; panY = 0;
+            updateTransform();
+        }
+
+        function updateTransform() {
+            wrapper.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+            const markers = document.querySelectorAll('.marker');
+            markers.forEach(m => {
+                m.style.transform = `translate(-50%, -50%) scale(${1 / scale})`;
+            });
+        }
+
+        container.addEventListener('pointerdown', (e) => {
+            if (!currentImage.src || e.target.tagName.toLowerCase() === 'button') return;
+            
+            activePointers.push({ id: e.pointerId, x: e.clientX, y: e.clientY });
+
+            if (activePointers.length === 1) {
+                isDragging = false;
+                wasPinching = false; // Resetujemo blokadu
+                startX = e.clientX; startY = e.clientY;
+                startPanX = panX; startPanY = panY;
+                container.setPointerCapture(e.pointerId);
+            } else if (activePointers.length >= 2) {
+                isDragging = false;
+                wasPinching = true; // Beležimo da korisnik zumira!
+                initialPinchDist = Math.hypot(
+                    activePointers[0].x - activePointers[1].x,
+                    activePointers[0].y - activePointers[1].y
+                );
+                initialScale = scale;
+            }
+        });
+
+        container.addEventListener('pointermove', (e) => {
+            if (!currentImage.src) return;
+
+            const pointer = activePointers.find(p => p.id === e.pointerId);
+            if (pointer) {
+                pointer.x = e.clientX;
+                pointer.y = e.clientY;
+            }
+
+            if (activePointers.length === 1 && e.buttons === 1 && !wasPinching) {
+                const dx = e.clientX - startX;
+                const dy = e.clientY - startY;
+                
+                if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+                    isDragging = true;
+                    panX = startPanX + dx;
+                    panY = startPanY + dy;
+                    wrapper.style.transition = 'none'; 
+                    updateTransform();
+                }
+            } else if (activePointers.length >= 2) {
+                const dist = Math.hypot(
+                    activePointers[0].x - activePointers[1].x,
+                    activePointers[0].y - activePointers[1].y
+                );
+                if (initialPinchDist) {
+                    const pinchRatio = dist / initialPinchDist;
+                    scale = initialScale * pinchRatio;
+                    scale = Math.max(0.5, Math.min(scale, 8)); 
+                    wrapper.style.transition = 'none';
+                    updateTransform();
+                }
+            }
+        });
+
+        const removePointer = (e) => {
+            activePointers = activePointers.filter(p => p.id !== e.pointerId);
+            if (activePointers.length < 2) {
+                initialPinchDist = null;
+            }
+            // Kada se dignu svi prsti, gasimo blokadu
+            if (activePointers.length === 0) {
+                wasPinching = false;
+            }
+        };
+
+        container.addEventListener('pointerup', (e) => {
+            if (!currentImage.src) return;
+            container.releasePointerCapture(e.pointerId);
+            wrapper.style.transition = 'transform 0.1s ease-out';
+            
+            // Dozvoljavamo tap SAMO ako nije bilo zumiranja (wasPinching = false)
+            if (activePointers.length === 1 && !isDragging && !wasPinching && e.target.tagName.toLowerCase() !== 'button') {
+                pickColor(e); 
+            }
+            removePointer(e);
+        });
+
+        container.addEventListener('pointercancel', removePointer);
+
+        container.addEventListener('wheel', (e) => {
+            if (!currentImage.src) return;
+            e.preventDefault();
+            if (e.deltaY < 0) applyZoom(1.1);
+            else applyZoom(1/1.1);
+        });
+
+        function pickColor(event) {
+            const rect = canvas.getBoundingClientRect();
+            const displayX = event.clientX - rect.left;
+            const displayY = event.clientY - rect.top;
+
+            if (displayX < 0 || displayX > rect.width || displayY < 0 || displayY > rect.height) return;
+
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const pxX = displayX * scaleX;
+            const pxY = displayY * scaleY;
+
+            const px = ctx.getImageData(pxX, pxY, 1, 1).data;
+            pointCount++;
+
+            const pctX = (displayX / rect.width) * 100;
+            const pctY = (displayY / rect.height) * 100;
+
+            addMarker(pctX, pctY, px, pointCount);
+            processColor(px[0], px[1], px[2], pointCount);
+        }
+
+        function addMarker(pctX, pctY, color, index) {
+            const marker = document.createElement('div');
+            marker.className = 'marker';
+            marker.style.left = pctX + '%';
+            marker.style.top = pctY + '%';
+            marker.style.backgroundColor = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
+            marker.innerText = index;
+            marker.style.transform = `translate(-50%, -50%) scale(${1 / scale})`;
+            markersContainer.appendChild(marker);
+        }
+
+        function rgbToHsl(r, g, b) {
+            r /= 255, g /= 255, b /= 255;
+            let max = Math.max(r, g, b), min = Math.min(r, g, b);
+            let h, s, l = (max + min) / 2;
+            if (max == min) { h = s = 0; } 
+            else {
+                let d = max - min;
+                s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+                switch (max) {
+                    case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+                    case g: h = (b - r) / d + 2; break;
+                    case b: h = (r - g) / d + 4; break;
+                }
+                h /= 6;
+            }
+            return [h, s, l];
+        }
+
+        function hslToRgb(h, s, l) {
+            let r, g, b;
+            if (s == 0) { r = g = b = l; } 
+            else {
+                const hue2rgb = (p, q, t) => {
+                    if (t < 0) t += 1; if (t > 1) t -= 1;
+                    if (t < 1/6) return p + (q - p) * 6 * t;
+                    if (t < 1/2) return q;
+                    if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+                    return p;
+                }
+                let q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+                let p = 2 * l - q;
+                r = hue2rgb(p, q, h + 1/3); g = hue2rgb(p, q, h); b = hue2rgb(p, q, h - 1/3);
+            }
+            return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+        }
+
+        function calculateDistance(r1, g1, b1, r2, g2, b2) {
+            return Math.sqrt(Math.pow(r1 - r2, 2) + Math.pow(g1 - g2, 2) + Math.pow(b1 - b2, 2));
+        }
+
+        function getClosestPaint(r, g, b, brandPrefix) {
+            let closest = null; let minD = Infinity;
+            paintDatabase.forEach(p => {
+                if (p.brand.startsWith(brandPrefix)) {
+                    let d = calculateDistance(r, g, b, p.r, p.g, p.b);
+                    if (d < minD) { minD = d; closest = p; }
+                }
+            });
+            if(!closest) closest = paintDatabase[0];
+            return closest;
+        }
+
+        function getMixingAdvice(r, g, b) {
+            let [h, s, l] = rgbToHsl(r, g, b);
+            let hlL = Math.min(1.0, l + 0.15);
+            let [hlR, hlG, hlB] = hslToRgb(h, s, hlL);
+            let hlPaint = getClosestPaint(hlR, hlG, hlB, "VG") || getClosestPaint(hlR, hlG, hlB, "VM");
+
+            let shL = Math.max(0.0, l - 0.20);
+            let [shR, shG, shB] = hslToRgb(h, s, shL);
+            let shPaint = getClosestPaint(shR, shG, shB, "VG") || getClosestPaint(shR, shG, shB, "VM");
+
+            return { hlPaint, shPaint };
+        }
+
+        function processColor(r, g, b, index) {
+            let vallejo = getClosestPaint(r, g, b, "VG");
+            if (!vallejo) vallejo = getClosestPaint(r, g, b, "VM"); 
+            const citadel = getClosestPaint(r, g, b, "Citadel");
+            const advice = getMixingAdvice(r, g, b);
+            if (vallejo) addResultCard(vallejo, citadel, advice, r, g, b, index);
+        }
+
+        function addResultCard(vallejo, citadel, advice, r, g, b, index) {
+            const card = document.createElement('div');
+            card.className = 'color-card';
+            const baseColor = `rgb(${vallejo.r}, ${vallejo.g}, ${vallejo.b})`;
+            const hlColor = `rgb(${advice.hlPaint.r}, ${advice.hlPaint.g}, ${advice.hlPaint.b})`;
+            const shColor = `rgb(${advice.shPaint.r}, ${advice.shPaint.g}, ${advice.shPaint.b})`;
+            
+            card.innerHTML = `
+                <div class="card-header">
+                    <div style="width: 24px; height: 24px; background-color: var(--primary-color); color: white; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-weight: bold; margin-right: 12px; font-size: 12px;">${index}</div>
+                    <div class="color-drop" style="background-color: ${baseColor}"></div>
+                    <div style="flex: 1;">
+                        <h3 class="color-title">${vallejo.name}</h3>
+                        <p class="color-subtitle">Alt: ${citadel.name}</p>
+                    </div>
+                </div>
+                <div class="advice-row">
+                    <div class="color-drop-small" style="background-color: ${hlColor}"></div>
+                    <span>Hajlajt: Umešaj ${advice.hlPaint.name}</span>
+                </div>
+                <div class="advice-row">
+                    <div class="color-drop-small" style="background-color: ${shColor}"></div>
+                    <span>Senka: Umešaj ${advice.shPaint.name}</span>
+                </div>
+            `;
+            resultsDiv.insertBefore(card, resultsDiv.firstChild); 
+        }
+
+        function clearResults() { 
+            resultsDiv.innerHTML = ''; 
+            markersContainer.innerHTML = '';
+            pointCount = 0;
+        }
+
+        const modal = document.getElementById('mixerModal');
+        const sel1 = document.getElementById('color1Select');
+        const sel2 = document.getElementById('color2Select');
+
+        paintDatabase.forEach((p, index) => {
+            if(p.brand !== "Wash") {
+                sel1.add(new Option(p.name, index));
+                sel2.add(new Option(p.name, index));
+            }
+        });
+        sel2.selectedIndex = 1; 
+
+        function openMixer() { modal.style.display = 'flex'; updateMixer(); }
+        function closeMixer() { modal.style.display = 'none'; }
+
+        function updateMixer() {
+            const p1 = paintDatabase[sel1.value];
+            const p2 = paintDatabase[sel2.value];
+            const ratio = parseFloat(document.getElementById('mixSlider').value);
+
+            document.getElementById('mixDrop1').style.backgroundColor = `rgb(${p1.r}, ${p1.g}, ${p1.b})`;
+            document.getElementById('mixDrop2').style.backgroundColor = `rgb(${p2.r}, ${p2.g}, ${p2.b})`;
+
+            const drops2 = Math.round(ratio * 10);
+            const drops1 = 10 - drops2;
+            document.getElementById('drops1Text').innerText = drops1 + " kapi";
+            document.getElementById('drops2Text').innerText = drops2 + " kapi";
+
+            const mixR = Math.round(p1.r * (1 - ratio) + p2.r * ratio);
+            const mixG = Math.round(p1.g * (1 - ratio) + p2.g * ratio);
+            const mixB = Math.round(p1.b * (1 - ratio) + p2.b * ratio);
+
+            let resultPaint = getClosestPaint(mixR, mixG, mixB, "VG");
+            if(!resultPaint) resultPaint = getClosestPaint(mixR, mixG, mixB, "VM");
+            
+            document.getElementById('mixResultDrop').style.backgroundColor = `rgb(${resultPaint.r}, ${resultPaint.g}, ${resultPaint.b})`;
+            document.getElementById('mixResultText').innerText = resultPaint.name;
+        }
+    </script>
+</body>
+</html>
